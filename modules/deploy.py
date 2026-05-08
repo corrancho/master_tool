@@ -14,8 +14,9 @@ from modules.ssh_manager import _build_ssh_cmd
 
 def deploy_nextjs():
     """
-    Despliega una aplicación Next.js en un servidor remoto:
-    git pull → npm install → npm run build → pm2 restart (o systemctl).
+    Despliega una aplicación Next.js.
+    Comprueba si hay commits nuevos antes de buildear.
+    git fetch → ¿hay cambios? → pull → npm install → npm run build → pm2 restart
     """
     print(f"\n{Colors.BOLD}Despliegue de aplicación Next.js{Colors.RESET}\n")
 
@@ -29,6 +30,21 @@ def deploy_nextjs():
         _deploy_nextjs_local()
 
 
+def _has_new_commits(app_path: Path, branch: str) -> bool:
+    """Devuelve True si el remoto tiene commits que no están en local."""
+    import subprocess as sp
+    # Descarga info del remoto sin modificar el working tree
+    sp.run(["git", "-C", str(app_path), "fetch", "origin"], capture_output=True)
+    result = sp.run(
+        ["git", "-C", str(app_path), "rev-list", "--count", f"HEAD..origin/{branch}"],
+        capture_output=True, text=True,
+    )
+    try:
+        return int(result.stdout.strip()) > 0
+    except ValueError:
+        return True  # si no se puede determinar, build por seguridad
+
+
 def _deploy_nextjs_local():
     app_dir = require_input("Ruta del proyecto Next.js")
     branch = input(f"{Colors.CYAN}Rama [main]: {Colors.RESET}").strip() or "main"
@@ -38,6 +54,14 @@ def _deploy_nextjs_local():
     if not app_path.exists():
         print(error(f"No existe el directorio: {app_path}"))
         return
+
+    # Comprobar si hay commits nuevos en remoto
+    print(f"\n{info('Comprobando si hay cambios en el repositorio...')}")
+    if not _has_new_commits(app_path, branch):
+        print(success("Ya tienes la última versión. No hay nada que buildear."))
+        return
+
+    print(info("Hay commits nuevos. Iniciando despliegue..."))
 
     if not confirm(f"¿Desplegar {app_path}?"):
         return
@@ -80,25 +104,36 @@ def _deploy_nextjs_remote():
     pm2_name = input(f"{Colors.CYAN}Nombre de proceso PM2 (vacío para omitir): {Colors.RESET}").strip()
 
     pm2_cmd = f" && pm2 restart {pm2_name}" if pm2_name else ""
+
+    # El check de commits se ejecuta en el servidor remoto
     remote_script = (
         f"cd {app_dir}"
+        f" && git fetch origin"
+        f" && COMMITS=$(git rev-list --count HEAD..origin/{branch})"
+        f" && if [ \"$COMMITS\" -eq 0 ]; then echo 'UP_TO_DATE'; exit 0; fi"
         f" && git pull origin {branch}"
         f" && npm install --production=false"
         f" && npm run build"
         f"{pm2_cmd}"
+        f" && echo 'DEPLOY_OK'"
     )
 
     if not confirm(f"¿Ejecutar despliegue en {server['name']}?"):
         return
 
     cmd = _build_ssh_cmd(server, command=remote_script)
-    print(f"\n{info('Ejecutando despliegue remoto...')}\n")
-    result = subprocess.run(cmd)
+    print(f"\n{info('Comprobando cambios y ejecutando despliegue remoto...')}\n")
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    output = result.stdout + result.stderr
 
-    if result.returncode == 0:
+    if "UP_TO_DATE" in output:
+        print(success("Ya tienes la última versión en el servidor. No hay nada que buildear."))
+    elif result.returncode == 0:
         print(success("Despliegue remoto completado."))
     else:
         print(error("El despliegue remoto falló."))
+        if output.strip():
+            print(f"{Colors.GRAY}{output.strip()}{Colors.RESET}")
 
 
 def run_deploy_script():
