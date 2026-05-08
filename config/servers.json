@@ -1,0 +1,22 @@
+{
+  "servers": [
+    {
+      "name": "vps-produccion",
+      "alias": "prod",
+      "host": "123.45.67.89",
+      "user": "ubuntu",
+      "port": 22,
+      "key": "~/.ssh/github_ed25519",
+      "description": "Servidor de producción — aplicaciones Next.js"
+    },
+    {
+      "name": "vps-staging",
+      "alias": "stg",
+      "host": "98.76.54.32",
+      "user": "ubuntu",
+      "port": 22,
+      "key": "~/.ssh/github_ed25519",
+      "description": "Servidor de staging y pruebas"
+    }
+  ]
+}
