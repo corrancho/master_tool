@@ -1,0 +1,11 @@
+# Dependencias opcionales de Master Tool
+# Instala solo las que necesites.
+
+# SSH remoto avanzado (opcional, el módulo usa ssh nativo por defecto)
+# paramiko>=3.4.0
+
+# Interfaz CLI enriquecida (opcional, alternativa a ANSI manual)
+# rich>=13.7.0
+
+# Carga de archivos .env para configuración de entorno
+# python-dotenv>=1.0.0
